@@ -82,48 +82,6 @@
     @keyframes bubbleAppear { 0%{opacity:0;transform:translateY(-20px) scale(0.9)} 100%{opacity:1;transform:translateY(0) scale(1)} }
     @keyframes textSlide { 0%{opacity:0;transform:translateX(-10px)} 100%{opacity:1;transform:translateX(0)} }
     @keyframes pointerWave { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
-
-    /* Arrow indicator styles */
-    .presenter-arrow-indicator {
-      position: fixed;
-      pointer-events: none;
-      z-index: 2010;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0px;
-      transform: translateX(-50%);
-      animation: arrowIndicatorBounce 0.7s ease-in-out infinite;
-    }
-    .presenter-arrow-indicator .arrow-body {
-      width: 3px;
-      height: 18px;
-      background: #ff000f;
-      border-radius: 2px;
-    }
-    .presenter-arrow-indicator .arrow-head {
-      width: 0;
-      height: 0;
-      border-left: 7px solid transparent;
-      border-right: 7px solid transparent;
-      border-top: 10px solid #ff000f;
-    }
-    .presenter-arrow-indicator .arrow-label {
-      margin-top: 3px;
-      background: #ff000f;
-      color: #fff;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 3px;
-      white-space: nowrap;
-      letter-spacing: 0.5px;
-    }
-    @keyframes arrowIndicatorBounce {
-      0%, 100% { transform: translateX(-50%) translateY(0px); }
-      50%       { transform: translateX(-50%) translateY(-8px); }
-    }
-
     #main-content { flex:1; overflow-y:auto; overflow-x:hidden; scroll-behavior:smooth; position:relative; }
     #content { background:white; padding:40px; margin:20px; border-radius:4px; min-height:calc(100vh - 140px); position:relative; width:100%; box-sizing:border-box; overflow-x:hidden; }
     #content h1 { color:#2c3e50; border-bottom:2px solid #ff000f; padding-bottom:10px; margin-bottom:20px; font-size:28px; }
@@ -297,7 +255,6 @@ let sidebarOpen = true;
 let manualToggleLock = false;
 let _suppressHashLoad = false;
 let autoStartGuide = true;
-let wasAutoPausedByVisibility = false;
 
 // ─── PAGES / STEPS ───────────────────────────────────────────────────────────
 const pages = {
@@ -595,51 +552,32 @@ class PresenterGuide {
     this.selectedVoice = null;
     this.lastHighlightedEl = null;
     this._speedChanging = false;
-    this.arrows = [];
   }
 
   selectVoice() {
     const voices = this.synth.getVoices();
     if (!voices || voices.length === 0) return;
 
+    // 1. Prefer named female voices
     const femaleNames = ['Aria','Zira','Victoria','Karen','Samantha','Susan','Moira','Google US English Female','Microsoft Zira','Microsoft Aria'];
     for (let name of femaleNames) {
       const v = voices.find(v => v.name.includes(name));
       if (v) { this.selectedVoice = v; return; }
     }
+    // 2. Any voice with "female" in name
     const femV = voices.find(v => v.name.toLowerCase().includes('female'));
     if (femV) { this.selectedVoice = femV; return; }
+    // 3. Indian English
     const inV = voices.find(v => v.lang === 'en-IN' || v.lang === 'en_IN');
     if (inV) { this.selectedVoice = inV; return; }
+    // 4. Any English
     const enV = voices.find(v => v.lang && v.lang.startsWith('en'));
     if (enV) { this.selectedVoice = enV; return; }
+    // 5. Default first available
     this.selectedVoice = voices[0] || null;
   }
 
   setSteps(arr) { this.steps = arr; }
-
-  showArrowToElement(element) {
-    const rect = element.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-
-    const arrow = document.createElement('div');
-    arrow.className = 'presenter-arrow-indicator';
-    arrow.innerHTML = `
-      <div class="arrow-body"></div>
-      <div class="arrow-head"></div>
-      <div class="arrow-label">${element.textContent.trim()}</div>
-    `;
-    arrow.style.left = (rect.left + rect.width / 2) + 'px';
-    arrow.style.top  = (rect.top - 52) + 'px';
-    
-    document.body.appendChild(arrow);
-    this.arrows.push(arrow);
-  }
-
-  hideArrows() {
-    this.arrows.forEach(a => { if (a.parentNode) a.parentNode.removeChild(a); });
-    this.arrows = [];
-  }
 
   findElementByKeyword(keyword) {
     if (!keyword) return null;
@@ -709,7 +647,6 @@ class PresenterGuide {
       this.lastHighlightedEl.classList.remove('presenter-content-highlight');
       this.lastHighlightedEl = null;
     }
-    this.hideArrows();
   }
 
   positionAtContent(keyword) {
@@ -721,10 +658,6 @@ class PresenterGuide {
     this.lastHighlightedEl = targetEl;
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => {
-      const contentEl = document.getElementById('content');
-      const allLinks = contentEl.querySelectorAll('.important-link');
-      allLinks.forEach(link => this.showArrowToElement(link));
-
       const rect = targetEl.getBoundingClientRect();
       const presenterW = 230, presenterH = 290;
       const windowW = window.innerWidth, windowH = window.innerHeight;
@@ -743,7 +676,10 @@ class PresenterGuide {
 
   startGuide() {
     if (!this.steps || !this.steps.length) return;
+
+    // Ensure voices are loaded before starting
     this.selectVoice();
+
     this.synth.cancel();
     this.isPlaying = true;
     this.isPaused = false;
@@ -756,6 +692,7 @@ class PresenterGuide {
     document.getElementById('voiceIndicator').style.display = 'inline-block';
     document.getElementById('presenter-container').style.display = 'flex';
 
+    // Small delay to allow synth to be ready
     setTimeout(() => this.playStep(), 300);
   }
 
@@ -769,23 +706,28 @@ class PresenterGuide {
     const message = step[3];
     const keyword = step[4] || null;
 
+    // Update bubble text
     const textEl = document.getElementById('presenter-text');
     textEl.style.animation = 'none';
     void textEl.offsetWidth;
     textEl.style.animation = 'textSlide 0.3s ease-out';
     textEl.textContent = message;
 
+    // Highlight content
     this.clearContentHighlight();
     setTimeout(() => this.positionAtContent(keyword), 100);
 
+    // Cancel any previous speech
     this.synth.cancel();
 
+    // Build utterance
     const utter = new SpeechSynthesisUtterance(message);
     utter.lang = 'en-IN';
     utter.rate = currentSpeed;
     utter.pitch = 1.0;
     utter.volume = 1.0;
 
+    // Re-select voice each step to ensure it's loaded
     if (!this.selectedVoice) this.selectVoice();
     if (this.selectedVoice) utter.voice = this.selectedVoice;
 
@@ -803,6 +745,7 @@ class PresenterGuide {
 
     utter.onend = onDone;
     utter.onerror = (e) => {
+      // 'interrupted' is expected when synth.cancel() is called — not a real error
       if (e.error === 'interrupted' || e.error === 'canceled') return;
       console.warn('Speech error:', e.error);
       if (!this._speedChanging) onDone();
@@ -811,6 +754,8 @@ class PresenterGuide {
     try {
       this.synth.speak(utter);
 
+      // Chrome bug workaround: speech can stall after ~15 seconds
+      // Periodically call resume() to keep it going
       if (this._chromeBugTimer) clearInterval(this._chromeBugTimer);
       this._chromeBugTimer = setInterval(() => {
         if (this.synth.speaking && !this.synth.paused) {
@@ -865,8 +810,10 @@ class PresenterGuide {
 // ─── INIT PRESENTER ──────────────────────────────────────────────────────────
 const presenter = new PresenterGuide();
 
+// Load voices — browsers fire onvoiceschanged asynchronously
 if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = () => presenter.selectVoice();
+  // Also try immediately in case voices are already loaded
   presenter.selectVoice();
 }
 
@@ -910,16 +857,19 @@ function loadMarkdownFile(path) {
       });
       clearHighlights();
 
+      // AUTO-START: wait for voices to be ready then start guide
       if (autoStartGuide) {
         const voices = window.speechSynthesis.getVoices();
         if (voices && voices.length > 0) {
           presenter.selectVoice();
           setTimeout(() => startGuide(), 600);
         } else {
+          // Voices not ready yet — wait for them
           window.speechSynthesis.onvoiceschanged = () => {
             presenter.selectVoice();
             setTimeout(() => startGuide(), 300);
           };
+          // Fallback: try anyway after 1.5 seconds
           setTimeout(() => {
             if (!presenter.isPlaying) {
               presenter.selectVoice();
@@ -949,7 +899,7 @@ function toggleHelp() {
   popup.innerHTML = `
     <button class="help-popup-close" onclick="document.getElementById('helpPopup').style.display='none'">✕</button>
     <div style="font-size:14px;line-height:1.6;color:#333;">
-      <p style="margin-bottom:12px;"><b>🔴 Red Terms</b> — Click any red term (MyIS, CHGPL, GLR, etc.) to see explanation. Arrows point to each one.</p>
+      <p style="margin-bottom:12px;"><b>🔴 Red Terms</b> — Click any red term (MyIS, CHGPL, GLR, etc.) to see explanation.</p>
       <p style="margin-bottom:12px;"><b>▶ Interactive Guide</b> — Voice narrates and highlights content on every page automatically.</p>
       <p style="margin-bottom:12px;"><b>🔍 Search</b> — Type to find content. Press Enter to jump between results.</p>
       <p style="margin-bottom:12px;"><b>⏸ Pause</b> — Pause or resume voice narration anytime.</p>
@@ -958,31 +908,19 @@ function toggleHelp() {
   popup.style.display = 'block';
 }
 
-// ─── VISIBILITY CHANGE ─ AUTO-RESUME FIX ───────────────────────────────────
+// ─── VISIBILITY CHANGE ───────────────────────────────────────────────────────
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    // User LEFT the tab
-    if (presenter.isPlaying && !presenter.isPaused) {
-      presenter.synth.pause();
-      presenter.isPaused = true;
-      wasAutoPausedByVisibility = true;
-      document.getElementById('pauseVoiceBtn').innerText = '▶ Resume';
-      document.getElementById('pauseVoiceBtn').classList.add('active');
-    }
-  } else {
-    // User CAME BACK to the tab - AUTO-RESUME
-    if (wasAutoPausedByVisibility && presenter.isPlaying && presenter.isPaused) {
-      presenter.synth.resume();
-      presenter.isPaused = false;
-      wasAutoPausedByVisibility = false;
-      document.getElementById('pauseVoiceBtn').innerText = '⏸ Pause';
-      document.getElementById('pauseVoiceBtn').classList.remove('active');
-    }
+  if (document.hidden && presenter.isPlaying && !presenter.isPaused) {
+    presenter.synth.pause();
+    presenter.isPaused = true;
+    document.getElementById('pauseVoiceBtn').innerText = '▶ Resume';
+    document.getElementById('pauseVoiceBtn').classList.add('active');
   }
 });
 
 // ─── BOOT ────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
+  // Pre-load voices
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();
     presenter.selectVoice();
@@ -996,3 +934,4 @@ window.addEventListener('hashchange', loadMarkdown);
 </script>
 </body>
 </html>
+
