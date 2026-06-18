@@ -108,10 +108,33 @@
     .image-wrapper:hover { box-shadow:0 8px 20px rgba(255,0,15,0.2); transform:translateY(-5px); }
     .image-wrapper img { width:100%; height:auto; display:block; }
     .image-wrapper.active { border-color:#ff000f; border-width:3px; box-shadow:0 0 25px rgba(255,0,15,0.5); }
-    .visual-arrow { position:absolute; display:none; color:#888; font-size:30px; font-weight:bold; z-index:10; pointer-events:none; transform:translate(-50%,-50%); animation:arrowBounce 0.8s infinite; }
+    .visual-arrow {
+        position: absolute;
+        display: none;
+        font-weight: bold;
+        z-index: 20;
+        pointer-events: none;
+    }
+    .visual-arrow.center-arrow {
+        display: none !important;
+    }
+    .visual-arrow.top-left-arrow {
+        left: 15px;
+        top: 15px;
+        color: #888888;
+        font-size: 40px;
+        animation: arrowBounceTopLeft 0.8s infinite;
+    }
+    .arrow-text-highlight {
+        background-color: rgba(136,136,136,0.12) !important;
+        border-left: 4px solid #888888 !important;
+        padding-left: 10px !important;
+        border-radius: 3px;
+        transition: all 0.3s ease;
+    }
     .search-highlight { background-color:#ffeb3b !important; color:#000 !important; font-weight:bold; padding:2px 4px; border-radius:2px; }
     .search-highlight.active-match { background-color:#ff9800 !important; }
-    @keyframes arrowBounce { 0%,100%{transform:translate(-50%,-50%) translateY(0)} 50%{transform:translate(-50%,-50%) translateY(-12px)} }
+    @keyframes arrowBounceTopLeft { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
     .loading { padding:20px; font-style:italic; color:#666; }
     .voice-indicator { display:inline-block; margin-left:10px; color:#000; font-size:12px; padding:4px 8px; background:rgba(0,0,0,0.1); border-radius:3px; animation:pulse 1.5s infinite; }
     #header h1 { color:#000; margin:0; font-size:20px; font-weight:bold; padding-bottom:8px; }
@@ -247,6 +270,12 @@ function injectImportantLinks(html) {
   return html;
 }
 
+// ─── ARROW CONFIG — Only keywords listed here will trigger the arrow ──────────
+// Add any keyword here to enable arrow display for that specific step
+const ARROW_CONFIG = {
+  'Additional Information': { position: 'top-left' }
+};
+
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let currentPageType = 'software_licensing';
 let searchMatches = [];
@@ -288,6 +317,7 @@ const pages = {
       [-1,-1,-1,'ULP also covers open global platforms where end-user access is not controlled and services are available to all ABB users, such as ServiceNow and ABB dot COM.','ServiceNow'],
       [-1,-1,-1,'Since Q3 2021, five platforms are included under ULP: A3 Platform, Ability, Customer Experience, Human Resources, and Service and Performance Excellence.','A3 Platform'],
       [-1,-1,-1,'Cyber Security Charges, or CSC, are reserved exclusively for Information Security activities and services under CHGPL.','Cyber Security Charges'],
+      [-1,-1,-1,'Charges are applied based on the approved charging model and software licensing allocation methodology defined by CHGPL.','Additional Information'],
       [-1,-1,-1,'Global Services Infrastructure, or GSI, covers infrastructure services including Hosting Services, Network Services, End User Experience, and End User Services.','Global Services Infrastructure'],
       [-1,-1,-1,'Any unauthorized software installations will be detected through periodic compliance scans conducted every fortnight by the Information Security team.','Any unauthorized software installations will be detected'],
       [-1,-1,-1,'When unauthorized software is detected, an automated email notification is sent to the respective user with details of the identified software.','automated email notification'],
@@ -355,7 +385,7 @@ const pages = {
       [-1,-1,-1,'You must protect company information from unauthorized access, loss, or disclosure when using external storage devices.','Protect company information'],
       [-1,-1,-1,'Comply with all applicable security controls and data protection requirements. Always verify that the removable media device is authorized and secure before use.','Comply with all applicable security'],
       [-1,-1,-1,'For detailed instructions, refer to the IT Security Guidelines for Engineers on Use of Removable Media document provided by Information Security.','Reference Guidelines'],
-      [-1,-1,-1,'This document provides guidance on safe handling of USB drives, information security best practices, data transfer procedures, and risk mitigation measures.','Safe handling of USB'],
+      [-1,-1,-1,'This document provides guidance on safe handling of USB drives, information security best practices, data transfer procedures, and risk mitigation measures.','This document provides guidance on:'],
       [-1,-1,-1,'All employees are expected to adhere to the prescribed guidelines whenever removable media is used to transfer or store ABB information.','Compliance'],
       [-1,-1,-1,'Failure to comply with these guidelines may result in security risks and non-compliance with ABB Information Security policies, which may lead to disciplinary action.','Failure to comply']
     ]
@@ -369,7 +399,6 @@ const pages = {
       [-1,-1,-1,'Billing Impact: Once unsubscribed, the software will NOT be charged from the corresponding quarter of the year, ensuring cost optimization.','Billing Impact'],
       [-1,-1,-1,'This ensures cost optimization and better license management across your department and the entire organization.','cost optimization'],
       [-1,-1,-1,'The unsubscribe request must be approved by the software owner. Only after approval will you receive the benefit of charge removal from your billing.','Approval Requirement'],
-      [-1,-1,-1,'Once submitted, the request is sent to the concerned software owner for review and approval before the change takes effect.','concerned software owner'],
       [-1,-1,-1,'Periodic email notifications will be sent to remind you to review and unsubscribe unused licenses where applicable.','Periodic email notifications'],
       [-1,-1,-1,'Use the ISC Review Portal link provided in communications to access the system and manage your software licenses effectively.','Portal Link']
     ]
@@ -551,29 +580,24 @@ class PresenterGuide {
     this.timeoutId = null;
     this.selectedVoice = null;
     this.lastHighlightedEl = null;
+    this.lastTextHighlightEl = null;
     this._speedChanging = false;
   }
 
   selectVoice() {
     const voices = this.synth.getVoices();
     if (!voices || voices.length === 0) return;
-
-    // 1. Prefer named female voices
     const femaleNames = ['Aria','Zira','Victoria','Karen','Samantha','Susan','Moira','Google US English Female','Microsoft Zira','Microsoft Aria'];
     for (let name of femaleNames) {
       const v = voices.find(v => v.name.includes(name));
       if (v) { this.selectedVoice = v; return; }
     }
-    // 2. Any voice with "female" in name
     const femV = voices.find(v => v.name.toLowerCase().includes('female'));
     if (femV) { this.selectedVoice = femV; return; }
-    // 3. Indian English
     const inV = voices.find(v => v.lang === 'en-IN' || v.lang === 'en_IN');
     if (inV) { this.selectedVoice = inV; return; }
-    // 4. Any English
     const enV = voices.find(v => v.lang && v.lang.startsWith('en'));
     if (enV) { this.selectedVoice = enV; return; }
-    // 5. Default first available
     this.selectedVoice = voices[0] || null;
   }
 
@@ -649,6 +673,13 @@ class PresenterGuide {
     }
   }
 
+  clearTextHighlight() {
+    if (this.lastTextHighlightEl) {
+      this.lastTextHighlightEl.classList.remove('arrow-text-highlight');
+      this.lastTextHighlightEl = null;
+    }
+  }
+
   positionAtContent(keyword) {
     const container = document.getElementById('presenter-container');
     this.clearContentHighlight();
@@ -674,25 +705,91 @@ class PresenterGuide {
     }, 120);
   }
 
+  // ── ARROW: only shows when keyword is listed in ARROW_CONFIG ──────────────
+  showArrowOnImage(keyword) {
+    // Step 1: Always hide all arrows and clear any previous text highlight
+    this.hideAllArrows();
+    this.clearTextHighlight();
+
+    // Step 2: Only proceed if this keyword is configured to show an arrow
+    if (!keyword || !ARROW_CONFIG[keyword]) return;
+
+    const contentEl = document.getElementById('content');
+    if (!contentEl) return;
+
+    const imageWrappers = Array.from(contentEl.querySelectorAll('.image-wrapper'));
+    const search = keyword.toLowerCase().trim();
+    let targetWrapper = null;
+
+    // Look for an image near the matching keyword text
+    for (let wrapper of imageWrappers) {
+      if (wrapper.textContent.toLowerCase().includes(search)) {
+        targetWrapper = wrapper;
+        break;
+      }
+    }
+
+    // Fallback: use first image on page if any exist
+    if (!targetWrapper && imageWrappers.length > 0) {
+      targetWrapper = imageWrappers[0];
+    }
+
+    if (targetWrapper) {
+      // Show grey top-left arrow on the image
+      let arrow = targetWrapper.querySelector('.visual-arrow');
+      if (!arrow) {
+        arrow = document.createElement('div');
+        arrow.className = 'visual-arrow top-left-arrow';
+        arrow.textContent = '➤';
+        targetWrapper.appendChild(arrow);
+      }
+      arrow.classList.remove('center-arrow');
+      arrow.classList.add('top-left-arrow');
+      arrow.style.display = 'block';
+      arrow.style.visibility = 'visible';
+      arrow.style.opacity = '1';
+    } else {
+      // No images on page — apply grey highlight to matching text element instead
+      const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.nodeValue && node.nodeValue.toLowerCase().includes(search)) {
+          let parent = node.parentElement;
+          while (parent && parent !== contentEl) {
+            const tag = parent.tagName.toLowerCase();
+            if (['p','li','td','th','h1','h2','h3','h4','h5','h6','blockquote'].includes(tag)) break;
+            parent = parent.parentElement;
+          }
+          if (parent && parent !== contentEl) {
+            parent.classList.add('arrow-text-highlight');
+            this.lastTextHighlightEl = parent;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  hideAllArrows() {
+    document.querySelectorAll('.visual-arrow').forEach(arrow => {
+      arrow.style.display = 'none';
+      arrow.style.visibility = 'hidden';
+    });
+  }
+
   startGuide() {
     if (!this.steps || !this.steps.length) return;
-
-    // Ensure voices are loaded before starting
     this.selectVoice();
-
     this.synth.cancel();
     this.isPlaying = true;
     this.isPaused = false;
     this.currentStepIndex = 0;
     this._speedChanging = false;
-
     document.getElementById('pauseVoiceBtn').style.display = 'block';
     document.getElementById('speedControl').classList.remove('disabled');
     document.getElementById('guideBtn').classList.add('active');
     document.getElementById('voiceIndicator').style.display = 'inline-block';
     document.getElementById('presenter-container').style.display = 'flex';
-
-    // Small delay to allow synth to be ready
     setTimeout(() => this.playStep(), 300);
   }
 
@@ -706,28 +803,26 @@ class PresenterGuide {
     const message = step[3];
     const keyword = step[4] || null;
 
-    // Update bubble text
     const textEl = document.getElementById('presenter-text');
     textEl.style.animation = 'none';
     void textEl.offsetWidth;
     textEl.style.animation = 'textSlide 0.3s ease-out';
     textEl.textContent = message;
 
-    // Highlight content
     this.clearContentHighlight();
-    setTimeout(() => this.positionAtContent(keyword), 100);
+    setTimeout(() => {
+      this.positionAtContent(keyword);
+      this.showArrowOnImage(keyword); // Arrow appears ONLY if keyword is in ARROW_CONFIG
+    }, 100);
 
-    // Cancel any previous speech
     this.synth.cancel();
 
-    // Build utterance
     const utter = new SpeechSynthesisUtterance(message);
     utter.lang = 'en-IN';
     utter.rate = currentSpeed;
     utter.pitch = 1.0;
     utter.volume = 1.0;
 
-    // Re-select voice each step to ensure it's loaded
     if (!this.selectedVoice) this.selectVoice();
     if (this.selectedVoice) utter.voice = this.selectedVoice;
 
@@ -745,7 +840,6 @@ class PresenterGuide {
 
     utter.onend = onDone;
     utter.onerror = (e) => {
-      // 'interrupted' is expected when synth.cancel() is called — not a real error
       if (e.error === 'interrupted' || e.error === 'canceled') return;
       console.warn('Speech error:', e.error);
       if (!this._speedChanging) onDone();
@@ -753,9 +847,6 @@ class PresenterGuide {
 
     try {
       this.synth.speak(utter);
-
-      // Chrome bug workaround: speech can stall after ~15 seconds
-      // Periodically call resume() to keep it going
       if (this._chromeBugTimer) clearInterval(this._chromeBugTimer);
       this._chromeBugTimer = setInterval(() => {
         if (this.synth.speaking && !this.synth.paused) {
@@ -765,7 +856,6 @@ class PresenterGuide {
           clearInterval(this._chromeBugTimer);
         }
       }, 10000);
-
     } catch (e) {
       console.warn('Speak error:', e);
       onDone();
@@ -796,6 +886,8 @@ class PresenterGuide {
     this.currentStepIndex = 0;
     this._speedChanging = false;
     this.clearContentHighlight();
+    this.clearTextHighlight();
+    this.hideAllArrows();
     document.getElementById('pauseVoiceBtn').style.display = 'none';
     document.getElementById('speedControl').classList.add('disabled');
     document.getElementById('pauseVoiceBtn').innerText = '⏸ Pause';
@@ -807,17 +899,13 @@ class PresenterGuide {
   }
 }
 
-// ─── INIT PRESENTER ──────────────────────────────────────────────────────────
 const presenter = new PresenterGuide();
 
-// Load voices — browsers fire onvoiceschanged asynchronously
 if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = () => presenter.selectVoice();
-  // Also try immediately in case voices are already loaded
   presenter.selectVoice();
 }
 
-// ─── GUIDE CONTROLS ──────────────────────────────────────────────────────────
 function toggleGuide() { presenter.isPlaying ? stopGuide() : startGuide(); }
 function togglePauseVoice() { presenter.pauseVoice(); }
 
@@ -836,7 +924,6 @@ function startGuide() {
   presenter.startGuide();
 }
 
-// ─── MARKDOWN LOADER ─────────────────────────────────────────────────────────
 function loadMarkdownFile(path) {
   document.getElementById('content').innerHTML = '<div class="loading">Loading content...</div>';
   fetch(path)
@@ -846,7 +933,7 @@ function loadMarkdownFile(path) {
     })
     .then(text => {
       let html = marked.parse(text);
-      html = html.replace(/<img (.*?)>/g, '<div class="image-wrapper"><span class="visual-arrow">➤</span><img $1></div>');
+      html = html.replace(/<img (.*?)>/g, '<div class="image-wrapper"><span class="visual-arrow top-left-arrow">➤</span><img $1></div>');
       html = injectImportantLinks(html);
       document.getElementById('content').innerHTML = html;
       document.getElementById('content').querySelectorAll('a').forEach(link => {
@@ -857,19 +944,16 @@ function loadMarkdownFile(path) {
       });
       clearHighlights();
 
-      // AUTO-START: wait for voices to be ready then start guide
       if (autoStartGuide) {
         const voices = window.speechSynthesis.getVoices();
         if (voices && voices.length > 0) {
           presenter.selectVoice();
           setTimeout(() => startGuide(), 600);
         } else {
-          // Voices not ready yet — wait for them
           window.speechSynthesis.onvoiceschanged = () => {
             presenter.selectVoice();
             setTimeout(() => startGuide(), 300);
           };
-          // Fallback: try anyway after 1.5 seconds
           setTimeout(() => {
             if (!presenter.isPlaying) {
               presenter.selectVoice();
@@ -891,7 +975,6 @@ function loadMarkdown() {
   loadMarkdownFile(path);
 }
 
-// ─── HELP ────────────────────────────────────────────────────────────────────
 function toggleHelp() {
   const popup = document.getElementById('helpPopup');
   if (popup.style.display === 'block') { popup.style.display = 'none'; return; }
@@ -908,7 +991,6 @@ function toggleHelp() {
   popup.style.display = 'block';
 }
 
-// ─── VISIBILITY CHANGE ───────────────────────────────────────────────────────
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && presenter.isPlaying && !presenter.isPaused) {
     presenter.synth.pause();
@@ -918,9 +1000,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ─── BOOT ────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  // Pre-load voices
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();
     presenter.selectVoice();
@@ -934,4 +1014,3 @@ window.addEventListener('hashchange', loadMarkdown);
 </script>
 </body>
 </html>
-
